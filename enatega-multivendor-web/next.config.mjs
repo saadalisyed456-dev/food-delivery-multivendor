@@ -26,10 +26,15 @@ const configuredApiImagePatterns = [
   })
   .filter(Boolean);
 
+const isDev = process.env.NODE_ENV !== "production";
+
+// In development the app is shown inside the Base44 preview iframe, so the
+// frame-ancestors directive must allow embedding. Production keeps the
+// strict 'none' policy.
 const contentSecurityPolicy = [
   "default-src 'self'",
   "base-uri 'self'",
-  "frame-ancestors 'none'",
+  `frame-ancestors ${isDev ? "*" : "'none'"}`,
   "object-src 'none'",
   "form-action 'self'",
   "img-src 'self' data: blob: https:",
@@ -42,8 +47,15 @@ const contentSecurityPolicy = [
   "upgrade-insecure-requests",
 ].join("; ");
 
+// Next.js dev server blocks requests from unknown origins. Allow the Base44
+// preview origin (https://3000-<suffix>) so dev assets/HMR load in the iframe.
+const allowedDevOrigins = process.env.BASE44_PUBLIC_HOST_SUFFIX
+  ? [`3000-${process.env.BASE44_PUBLIC_HOST_SUFFIX}`]
+  : [];
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  allowedDevOrigins,
   webpack: (config) => {
     config.module.rules.push({
       test: /\.(woff|woff2|eot|ttf|otf)$/i,
@@ -70,10 +82,16 @@ const nextConfig = {
             key: "X-Content-Type-Options",
             value: "nosniff",
           },
-          {
-            key: "X-Frame-Options",
-            value: "DENY",
-          },
+          // X-Frame-Options would prevent the dev preview iframe from
+          // rendering the app; only enforce it in production.
+          ...(isDev
+            ? []
+            : [
+                {
+                  key: "X-Frame-Options",
+                  value: "DENY",
+                },
+              ]),
           {
             key: "Referrer-Policy",
             value: "strict-origin-when-cross-origin",
